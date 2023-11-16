@@ -1,0 +1,1716 @@
+
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from wordcloud import WordCloud
+import re
+import string
+import nltk
+import warnings
+%matplotlib inline
+
+# To terminate Warnings.
+warnings.filterwarnings("ignore")
+
+#viz Style.
+plt.style.use("seaborn")
+     
+
+train = pd.read_csv("/content/train_E6oV3lV.csv")
+test = pd.read_csv("/content/test_tweets_anuFYb8.csv")
+     
+
+train.shape , test.shape
+     
+((31962, 3), (17197, 2))
+
+train.head() , test.head()
+     
+(   id  label                                              tweet
+ 0   1      0   @user when a father is dysfunctional and is s...
+ 1   2      0  @user @user thanks for #lyft credit i can't us...
+ 2   3      0                                bihday your majesty
+ 3   4      0  #model   i love u take with u all the time in ...
+ 4   5      0             factsguide: society now    #motivation,
+       id                                              tweet
+ 0  31963  #studiolife #aislife #requires #passion #dedic...
+ 1  31964   @user #white #supremacists want everyone to s...
+ 2  31965  safe ways to heal your #acne!!    #altwaystohe...
+ 3  31966  is the hp and the cursed child book up for res...
+ 4  31967    3rd #bihday to my amazing, hilarious #nephew...)
+
+print(train.tail(),"\n")
+print(test.tail())
+     
+          id  label                                              tweet
+31957  31958      0  ate @user isz that youuu?ðŸ˜ðŸ˜ðŸ˜ðŸ˜ðŸ˜ð...
+31958  31959      0    to see nina turner on the airwaves trying to...
+31959  31960      0  listening to sad songs on a monday morning otw...
+31960  31961      1  @user #sikh #temple vandalised in in #calgary,...
+31961  31962      0                   thank you @user for you follow   
+
+          id                                              tweet
+17192  49155  thought factory: left-right polarisation! #tru...
+17193  49156  feeling like a mermaid ðŸ˜˜ #hairflip #neverre...
+17194  49157  #hillary #campaigned today in #ohio((omg)) &am...
+17195  49158  happy, at work conference: right mindset leads...
+17196  49159  my   song "so glad" free download!  #shoegaze ...
+
+# Let’s view what’s the length of the Tweets in our Train and Test data.
+length_train = train['tweet'].str.len()
+length_test = test['tweet'].str.len()
+plt.figure(figsize=(16,6))
+plt.hist(length_train , bins = 50 , label ="Train_Tweets",color = "skyblue")
+plt.hist(length_test, bins = 50 , label = "Test_Tweets")
+plt.legend()
+     
+<matplotlib.legend.Legend at 0x7ff3effe0670>
+
+
+# Selecting training labeled dataset of 31,962 tweets.
+# For test dataset we need to get labels, we need to use sentimental analysis tools like VADER, ROBERTA, TEXT BLOB etc. We will do that later.
+df = train
+df.shape
+     
+(31962, 3)
+
+df
+     
+id	label	tweet
+0	1	0	@user when a father is dysfunctional and is s...
+1	2	0	@user @user thanks for #lyft credit i can't us...
+2	3	0	bihday your majesty
+3	4	0	#model i love u take with u all the time in ...
+4	5	0	factsguide: society now #motivation
+...	...	...	...
+31957	31958	0	ate @user isz that youuu?ðŸ˜ðŸ˜ðŸ˜ðŸ˜ðŸ˜ð...
+31958	31959	0	to see nina turner on the airwaves trying to...
+31959	31960	0	listening to sad songs on a monday morning otw...
+31960	31961	1	@user #sikh #temple vandalised in in #calgary,...
+31961	31962	0	thank you @user for you follow
+31962 rows × 3 columns
+
+
+# Defining a function to remove corresponding pattern in the input text.
+def remove_pattern(input_text,pattern):
+    r = re.findall(pattern,input_text)
+    """It will find all the patterns in the input text"""
+    for word in r:
+        # Sub replace one or more matches with a string.
+        input_text = re.sub(word,"",input_text)
+    return input_text
+     
+
+# Remove twitter handles like "@user" and store it in new column is "clean_tweet".
+df['clean_tweet'] = np.vectorize(remove_pattern)(df['tweet'],"@[\w]*")
+     
+
+df.head()
+     
+id	label	tweet	clean_tweet
+0	1	0	@user when a father is dysfunctional and is s...	when a father is dysfunctional and is so sel...
+1	2	0	@user @user thanks for #lyft credit i can't us...	thanks for #lyft credit i can't use cause th...
+2	3	0	bihday your majesty	bihday your majesty
+3	4	0	#model i love u take with u all the time in ...	#model i love u take with u all the time in ...
+4	5	0	factsguide: society now #motivation	factsguide: society now #motivation
+
+df['clean_tweet'] = df['clean_tweet'].str.replace("[^a-zA-Z#]"," ")
+df.head()
+     
+id	label	tweet	clean_tweet
+0	1	0	@user when a father is dysfunctional and is s...	when a father is dysfunctional and is so sel...
+1	2	0	@user @user thanks for #lyft credit i can't us...	thanks for #lyft credit i can t use cause th...
+2	3	0	bihday your majesty	bihday your majesty
+3	4	0	#model i love u take with u all the time in ...	#model i love u take with u all the time in ...
+4	5	0	factsguide: society now #motivation	factsguide society now #motivation
+
+# Remove Short Words.
+# Here i am iterating through the string , so it will split all the word in a separate words , so if the word length is greater than 3 , it will add into string if not greater than it will ignore it.
+df['clean_tweet'] = df['clean_tweet'].apply(lambda x : " ".join([word for word in x.split() if len(word)>3]))
+df.head()
+     
+id	label	tweet	clean_tweet
+0	1	0	@user when a father is dysfunctional and is s...	when father dysfunctional selfish drags kids i...
+1	2	0	@user @user thanks for #lyft credit i can't us...	thanks #lyft credit cause they offer wheelchai...
+2	3	0	bihday your majesty	bihday your majesty
+3	4	0	#model i love u take with u all the time in ...	#model love take with time
+4	5	0	factsguide: society now #motivation	factsguide society #motivation
+
+# Individual Words Considered as tokens.
+tokenized_tweet = df['clean_tweet'].apply(lambda x : x.split())
+tokenized_tweet.head()
+     
+0    [when, father, dysfunctional, selfish, drags, ...
+1    [thanks, #lyft, credit, cause, they, offer, wh...
+2                              [bihday, your, majesty]
+3                     [#model, love, take, with, time]
+4                   [factsguide, society, #motivation]
+Name: clean_tweet, dtype: object
+
+# Stem the words.
+from nltk.stem.porter import PorterStemmer
+stemmer = PorterStemmer()
+tokenized_tweet = tokenized_tweet.apply(lambda sentence : [stemmer.stem(word) for word in sentence])
+tokenized_tweet.head()
+     
+0    [when, father, dysfunct, selfish, drag, kid, i...
+1    [thank, #lyft, credit, caus, they, offer, whee...
+2                              [bihday, your, majesti]
+3                     [#model, love, take, with, time]
+4                         [factsguid, societi, #motiv]
+Name: clean_tweet, dtype: object
+
+# Combine words into single sentence.
+for i in range(len(tokenized_tweet)):
+    tokenized_tweet[i] = " ".join(tokenized_tweet[i])
+
+tokenized_tweet.head()
+     
+0    when father dysfunct selfish drag kid into dys...
+1    thank #lyft credit caus they offer wheelchair ...
+2                                  bihday your majesti
+3                           #model love take with time
+4                             factsguid societi #motiv
+Name: clean_tweet, dtype: object
+
+df['clean_tweet'] = tokenized_tweet
+df.head()
+     
+id	label	tweet	clean_tweet
+0	1	0	@user when a father is dysfunctional and is s...	when father dysfunct selfish drag kid into dys...
+1	2	0	@user @user thanks for #lyft credit i can't us...	thank #lyft credit caus they offer wheelchair ...
+2	3	0	bihday your majesty	bihday your majesti
+3	4	0	#model i love u take with u all the time in ...	#model love take with time
+4	5	0	factsguide: society now #motivation	factsguid societi #motiv
+
+# It Will combine all sentences into a single string.
+all_words = " ".join([sentence for sentence in df['clean_tweet']])
+
+# visualize The Frequent Words.
+wordcloud = WordCloud(width = 800 , height = 500 , random_state = 42 , max_font_size = 100).generate(all_words)
+
+# plot the graph.
+plt.figure(figsize = (16,8))
+plt.imshow(wordcloud , interpolation = "bilinear")
+plt.axis("off")
+plt.show()
+     
+
+
+# Frequent Words Visualization For Positive Words.
+all_words = " ".join([sentence for sentence in df['clean_tweet'][df['label']==0]])
+
+# visualize The Frequent Words.
+wordcloud = WordCloud(width = 800 , height = 500 , random_state = 42 , max_font_size = 100).generate(all_words)
+
+# plot the graph.
+plt.figure(figsize = (16,8))
+plt.imshow(wordcloud , interpolation = "bilinear")
+plt.axis("off")
+plt.show()
+     
+
+
+# Frequent Words Visualization For Negative Words.
+all_words = " ".join([sentence for sentence in df['clean_tweet'][df['label']==1]])
+
+# visualize The Frequent Words.
+wordcloud = WordCloud(width = 800 , height = 500 , random_state = 42 , max_font_size = 100).generate(all_words)
+
+# plot the graph.
+plt.figure(figsize = (16,8))
+plt.imshow(wordcloud , interpolation = "bilinear")
+plt.axis("off")
+plt.show()
+     
+
+
+def add_value_labels(ax, spacing=5):
+    """Add labels to the end of each bar in a bar chart.
+
+    Arguments:
+        ax (matplotlib.axes.Axes): The matplotlib object containing the axes
+            of the plot to annotate.
+        spacing (int): The distance between the labels and the bars.
+    """
+
+    # For each bar: Place a label
+    for rect in ax.patches:
+        # Get X and Y placement of label from rect.
+        y_value = rect.get_height()
+        x_value = rect.get_x() + rect.get_width() / 2
+
+        # Number of points between bar and label. Change to your liking.
+        space = spacing
+        # Vertical alignment for positive values
+        va = 'bottom'
+
+        # If value of bar is negative: Place label below bar
+        if y_value < 0:
+            # Invert space to place label below
+            space *= -1
+            # Vertically align label at top
+            va = 'top'
+
+        # Use Y value as label and format number with one decimal place
+        label = "{:.1f}".format(y_value)
+
+        # Create annotation
+        ax.annotate(
+            label,                      # Use `label` as label
+            (x_value, y_value),         # Place label at end of the bar
+            xytext=(0, space),          # Vertically shift label by `space`
+            textcoords="offset points", # Interpret `xytext` as offset in points
+            ha='center',                # Horizontally center label
+            va=va)                      # Vertically align label differently for
+                                        # positive and negative values.
+     
+
+# Extract the hashtag.
+def hashtag_extract(tweets):
+    hashtag = []
+    # Loop Words In The tweet.
+    for tweet in tweets:
+        # The "r" in the beginning is making sure that the string is being treated as a "raw string".
+        ht = re.findall(r"#(\w+)",tweet) # "+" one or more occurrences.
+        hashtag.append(ht)
+    return hashtag
+     
+
+# Extract hashtags from non racist/sexist tweets.
+ht_positive = hashtag_extract(df['clean_tweet'][df['label']==0])
+
+# Extract hashtags from racist/sexist tweets.
+ht_negative = hashtag_extract(df['clean_tweet'][df['label']==1])
+     
+
+# Nested list
+ht_positive[:5]
+     
+[['run'], ['lyft', 'disapoint', 'getthank'], [], ['model'], ['motiv']]
+
+# Make a nested list into a Unnest list.
+ht_positive = sum(ht_positive,[])
+ht_negative = sum(ht_negative,[])
+ht_positive[:5]
+     
+['run', 'lyft', 'disapoint', 'getthank', 'model']
+
+# Use A dictionary from nltk to process the tweets.
+freq = nltk.FreqDist(ht_positive)
+
+# Convert this into a DataFrame.
+d = pd.DataFrame({'Hashtag':list(freq.keys()),'Count':list(freq.values())})
+
+d.head()
+     
+Hashtag	Count
+0	run	72
+1	lyft	2
+2	disapoint	1
+3	getthank	2
+4	model	375
+
+# Select top 10 hashtags.
+d = d.nlargest(columns='Count',n=10)
+
+# Plot the bar graph.
+plt.figure(figsize=(16,6))
+ax = sns.barplot(data=d,x="Hashtag",y="Count")
+plt.title("Top 10 Positive Hashtag Words",fontweight="bold",fontsize=25)
+add_value_labels(ax)
+plt.show()
+     
+
+
+# Use A dictionary from nltk to process the tweets.
+freq = nltk.FreqDist(ht_negative)
+
+# Convert this into a DataFrame.
+d = pd.DataFrame({'Hashtag':list(freq.keys()),'Count':list(freq.values())})
+
+d.head()
+     
+Hashtag	Count
+0	cnn	10
+1	michigan	2
+2	tcot	14
+3	australia	6
+4	opkillingbay	5
+
+# Select top 10 hashtags.
+d = d.nlargest(columns='Count',n=10)
+
+# Plot the bar graph.
+plt.figure(figsize=(16,6))
+ax = sns.barplot(data=d,x="Hashtag",y="Count")
+plt.title("Top 10 Negative Hashtag Words",fontweight="bold",fontsize=25)
+add_value_labels(ax)
+plt.show()
+     
+
+
+# Feature Engineering: Converting words into vectors or bag of words.
+from sklearn.feature_extraction.text import CountVectorizer
+
+# let's specify some hyper parameters w.r.t CountVectorizer , to get decent accuracy.
+# If We don't define max_feauture , it will take all the features , but it will take so much time for training the model.
+bow_vectorizer = CountVectorizer(max_df = .90 , min_df = 2 , max_features = 1000 , stop_words = "english")
+bow  = bow_vectorizer.fit_transform(df['clean_tweet'])
+     
+
+# Split the input data into training and testing sets.
+from sklearn.model_selection import train_test_split
+
+x_train,x_test,y_train,y_test = train_test_split(bow,df['label'],random_state=42,test_size=.25)
+     
+
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import f1_score , accuracy_score , precision_score , recall_score,classification_report,confusion_matrix
+
+# create a logistic regression model.
+model = LogisticRegression()
+model.fit(x_train,y_train)
+
+# Testing
+pred = model.predict(x_test)
+
+accuracy = accuracy_score(y_test,pred)
+precision = precision_score(y_test,pred)
+recall = recall_score(y_test,pred)
+f1 = f1_score(y_test,pred)
+report = classification_report(y_test,pred)
+matrix = confusion_matrix(y_test,pred)
+
+# Print The values.
+print('Accuracy: {:.2f}'.format(accuracy))
+print('Precision: {:.2f}'.format(precision))
+print('Recall: {:.2f}'.format(recall))
+print('F1Score: {:.2f}'.format(f1))
+print('classification report:\n',report)
+print('confusion matrix:\n',matrix)
+     
+Accuracy: 0.95
+Precision: 0.74
+Recall: 0.38
+F1Score: 0.50
+classification report:
+               precision    recall  f1-score   support
+
+           0       0.95      0.99      0.97      7432
+           1       0.74      0.38      0.50       559
+
+    accuracy                           0.95      7991
+   macro avg       0.85      0.68      0.73      7991
+weighted avg       0.94      0.95      0.94      7991
+
+confusion matrix:
+ [[7357   75]
+ [ 349  210]]
+
+# Use Probability To Get Output.
+pred_prob = model.predict_proba(x_test)
+# If Predection is Greater than or equal to 0.3 than 1 else 0.
+pred = pred_prob[:,1] >=0.3
+pred = pred.astype(np.int)
+
+accuracy = accuracy_score(y_test,pred)
+precision = precision_score(y_test,pred)
+recall = recall_score(y_test,pred)
+f1 = f1_score(y_test,pred)
+report = classification_report(y_test,pred)
+matrix = confusion_matrix(y_test,pred)
+
+# Print The predict values.
+print('Accuracy: {:.2f}'.format(accuracy))
+print('Precision: {:.2f}'.format(precision))
+print('Recall: {:.2f}'.format(recall))
+print('F1Score: {:.2f}'.format(f1))
+print('classification report:\n',report)
+print('confusion matrix:\n',matrix)
+     
+Accuracy: 0.94
+Precision: 0.62
+Recall: 0.50
+F1Score: 0.55
+classification report:
+               precision    recall  f1-score   support
+
+           0       0.96      0.98      0.97      7432
+           1       0.62      0.50      0.55       559
+
+    accuracy                           0.94      7991
+   macro avg       0.79      0.74      0.76      7991
+weighted avg       0.94      0.94      0.94      7991
+
+confusion matrix:
+ [[7256  176]
+ [ 277  282]]
+
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.metrics import f1_score , accuracy_score , precision_score , recall_score,classification_report,confusion_matrix
+
+# create a Naive Baye model.
+model = MultinomialNB()
+model.fit(x_train,y_train)
+
+accuracy = accuracy_score(y_test,pred)
+precision = precision_score(y_test,pred)
+recall = recall_score(y_test,pred)
+f1 = f1_score(y_test,pred)
+report = classification_report(y_test,pred)
+matrix = confusion_matrix(y_test,pred)
+
+# Print The values.
+print('Accuracy: {:.2f}'.format(accuracy))
+print('Precision: {:.2f}'.format(precision))
+print('Recall: {:.2f}'.format(recall))
+print('F1Score: {:.2f}'.format(f1))
+print('classification report:\n',report)
+print('confusion matrix:\n',matrix)
+     
+Accuracy: 0.94
+Precision: 0.62
+Recall: 0.50
+F1Score: 0.55
+classification report:
+               precision    recall  f1-score   support
+
+           0       0.96      0.98      0.97      7432
+           1       0.62      0.50      0.55       559
+
+    accuracy                           0.94      7991
+   macro avg       0.79      0.74      0.76      7991
+weighted avg       0.94      0.94      0.94      7991
+
+confusion matrix:
+ [[7256  176]
+ [ 277  282]]
+
+# Use Probability To Get Output.
+pred_prob = model.predict_proba(x_test)
+# If Predection is Greater than or equal to 0.3 than 1 else 0.
+pred = pred_prob[:,1] >=0.3
+pred = pred.astype(np.int)
+
+accuracy = accuracy_score(y_test,pred)
+precision = precision_score(y_test,pred)
+recall = recall_score(y_test,pred)
+f1 = f1_score(y_test,pred)
+report = classification_report(y_test,pred)
+matrix = confusion_matrix(y_test,pred)
+
+# Print The predict values.
+print('Accuracy: {:.2f}'.format(accuracy))
+print('Precision: {:.2f}'.format(precision))
+print('Recall: {:.2f}'.format(recall))
+print('F1Score: {:.2f}'.format(f1))
+print('classification report:\n',report)
+print('confusion matrix:\n',matrix)
+     
+Accuracy: 0.92
+Precision: 0.44
+Recall: 0.61
+F1Score: 0.51
+classification report:
+               precision    recall  f1-score   support
+
+           0       0.97      0.94      0.96      7432
+           1       0.44      0.61      0.51       559
+
+    accuracy                           0.92      7991
+   macro avg       0.71      0.78      0.73      7991
+weighted avg       0.93      0.92      0.92      7991
+
+confusion matrix:
+ [[6999  433]
+ [ 217  342]]
+
+from nltk.sentiment.vader import SentimentIntensityAnalyzer
+from nltk.corpus import stopwords
+import nltk
+nltk.download('punkt')
+nltk.download('vader_lexicon')
+nltk.download('averaged_perceptron_tagger')
+nltk.download('maxent_ne_chunker')
+nltk.download('words')
+     
+[nltk_data] Downloading package punkt to /root/nltk_data...
+[nltk_data]   Package punkt is already up-to-date!
+[nltk_data] Downloading package vader_lexicon to /root/nltk_data...
+[nltk_data]   Package vader_lexicon is already up-to-date!
+[nltk_data] Downloading package averaged_perceptron_tagger to
+[nltk_data]     /root/nltk_data...
+[nltk_data]   Package averaged_perceptron_tagger is already up-to-
+[nltk_data]       date!
+[nltk_data] Downloading package maxent_ne_chunker to
+[nltk_data]     /root/nltk_data...
+[nltk_data]   Package maxent_ne_chunker is already up-to-date!
+[nltk_data] Downloading package words to /root/nltk_data...
+[nltk_data]   Unzipping corpora/words.zip.
+True
+
+df1 = test
+df1.head()
+     
+id	tweet
+0	31963	#studiolife #aislife #requires #passion #dedic...
+1	31964	@user #white #supremacists want everyone to s...
+2	31965	safe ways to heal your #acne!! #altwaystohe...
+3	31966	is the hp and the cursed child book up for res...
+4	31967	3rd #bihday to my amazing, hilarious #nephew...
+
+# Selecting some tweets to do basic nltk processing.
+review = df['tweet'][50]
+#Tokenisation
+tokens = nltk.word_tokenize(review)
+# Part Of Speach tagging
+tagged = nltk.pos_tag(tokens)
+# To chunk the given list of tokens , so it takes these and actually will group them into chunks of text.
+entities = nltk.chunk.ne_chunk(tagged)
+entities.pprint()
+     
+(S
+  #/#
+  abc2020/NN
+  getting/VBG
+  ready/JJ
+  2/CD
+  remove/VB
+  the/DT
+  victums/NNS
+  frm/RB
+  #/#
+  pulseclub/JJ
+  #/#
+  prayfororlando/NN)
+
+# VADER Approach
+sia = SentimentIntensityAnalyzer()
+sia.polarity_scores(review)
+     
+{'neg': 0.0, 'neu': 0.762, 'pos': 0.238, 'compound': 0.3612}
+
+# To Make A Terminal progress bar , we using 'tqdm'.
+from tqdm.notebook import tqdm
+result = {}
+for i , row in tqdm(df1.iterrows(),total=len(df1)):
+    text = row['tweet']
+    myid = row['id']
+    result[myid] = sia.polarity_scores(text)
+result
+     
+  0%|          | 0/17197 [00:00<?, ?it/s]
+{31963: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 31964: {'neg': 0.0, 'neu': 0.92, 'pos': 0.08, 'compound': 0.0772},
+ 31965: {'neg': 0.0, 'neu': 0.663, 'pos': 0.337, 'compound': 0.6209},
+ 31966: {'neg': 0.086, 'neu': 0.786, 'pos': 0.127, 'compound': 0.2593},
+ 31967: {'neg': 0.0, 'neu': 0.534, 'pos': 0.466, 'compound': 0.8883},
+ 31968: {'neg': 0.0, 'neu': 0.571, 'pos': 0.429, 'compound': 0.4588},
+ 31969: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 31970: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 31971: {'neg': 0.136, 'neu': 0.864, 'pos': 0.0, 'compound': -0.3976},
+ 31972: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 31973: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 31974: {'neg': 0.0, 'neu': 0.656, 'pos': 0.344, 'compound': 0.6369},
+ 31975: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 31976: {'neg': 0.0, 'neu': 0.674, 'pos': 0.326, 'compound': 0.7003},
+ 31977: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 31978: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 31979: {'neg': 0.165, 'neu': 0.835, 'pos': 0.0, 'compound': -0.4168},
+ 31980: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 31981: {'neg': 0.0, 'neu': 0.682, 'pos': 0.318, 'compound': 0.4215},
+ 31982: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 31983: {'neg': 0.0, 'neu': 0.588, 'pos': 0.412, 'compound': 0.8562},
+ 31984: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 31985: {'neg': 0.0, 'neu': 0.667, 'pos': 0.333, 'compound': 0.6124},
+ 31986: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 31987: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 31988: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 31989: {'neg': 0.468, 'neu': 0.532, 'pos': 0.0, 'compound': -0.6597},
+ 31990: {'neg': 0.0, 'neu': 0.51, 'pos': 0.49, 'compound': 0.8271},
+ 31991: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 31992: {'neg': 0.0, 'neu': 0.66, 'pos': 0.34, 'compound': 0.8953},
+ 31993: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 31994: {'neg': 0.0, 'neu': 0.715, 'pos': 0.285, 'compound': 0.7171},
+ 31995: {'neg': 0.224, 'neu': 0.776, 'pos': 0.0, 'compound': -0.5994},
+ 31996: {'neg': 0.655, 'neu': 0.345, 'pos': 0.0, 'compound': -0.9228},
+ 31997: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 31998: {'neg': 0.0, 'neu': 0.526, 'pos': 0.474, 'compound': 0.4019},
+ 31999: {'neg': 0.0, 'neu': 0.733, 'pos': 0.267, 'compound': 0.6679},
+ 32000: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32001: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32002: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32003: {'neg': 0.0, 'neu': 0.507, 'pos': 0.493, 'compound': 0.8932},
+ 32004: {'neg': 0.0, 'neu': 0.742, 'pos': 0.258, 'compound': 0.5386},
+ 32005: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32006: {'neg': 0.0, 'neu': 0.876, 'pos': 0.124, 'compound': 0.34},
+ 32007: {'neg': 0.0, 'neu': 0.667, 'pos': 0.333, 'compound': 0.6696},
+ 32008: {'neg': 0.0, 'neu': 0.752, 'pos': 0.248, 'compound': 0.765},
+ 32009: {'neg': 0.0, 'neu': 0.506, 'pos': 0.494, 'compound': 0.5994},
+ 32010: {'neg': 0.0, 'neu': 0.632, 'pos': 0.368, 'compound': 0.5411},
+ 32011: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32012: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32013: {'neg': 0.0, 'neu': 0.402, 'pos': 0.598, 'compound': 0.8977},
+ 32014: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32015: {'neg': 0.095, 'neu': 0.905, 'pos': 0.0, 'compound': -0.3401},
+ 32016: {'neg': 0.0, 'neu': 0.747, 'pos': 0.253, 'compound': 0.5242},
+ 32017: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32018: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32019: {'neg': 0.0, 'neu': 0.364, 'pos': 0.636, 'compound': 0.7906},
+ 32020: {'neg': 0.073, 'neu': 0.628, 'pos': 0.298, 'compound': 0.694},
+ 32021: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32022: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32023: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32024: {'neg': 0.0, 'neu': 0.663, 'pos': 0.337, 'compound': 0.7249},
+ 32025: {'neg': 0.0, 'neu': 0.753, 'pos': 0.247, 'compound': 0.508},
+ 32026: {'neg': 0.0, 'neu': 0.738, 'pos': 0.262, 'compound': 0.4927},
+ 32027: {'neg': 0.163, 'neu': 0.837, 'pos': 0.0, 'compound': -0.6679},
+ 32028: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32029: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32030: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32031: {'neg': 0.0, 'neu': 0.612, 'pos': 0.388, 'compound': 0.6908},
+ 32032: {'neg': 0.147, 'neu': 0.853, 'pos': 0.0, 'compound': -0.4753},
+ 32033: {'neg': 0.0, 'neu': 0.847, 'pos': 0.153, 'compound': 0.4019},
+ 32034: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32035: {'neg': 0.0, 'neu': 0.541, 'pos': 0.459, 'compound': 0.7783},
+ 32036: {'neg': 0.0, 'neu': 0.694, 'pos': 0.306, 'compound': 0.6949},
+ 32037: {'neg': 0.069, 'neu': 0.931, 'pos': 0.0, 'compound': -0.1027},
+ 32038: {'neg': 0.0, 'neu': 0.838, 'pos': 0.162, 'compound': 0.4404},
+ 32039: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32040: {'neg': 0.0, 'neu': 0.806, 'pos': 0.194, 'compound': 0.4374},
+ 32041: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32042: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32043: {'neg': 0.0, 'neu': 0.712, 'pos': 0.288, 'compound': 0.8442},
+ 32044: {'neg': 0.136, 'neu': 0.864, 'pos': 0.0, 'compound': -0.296},
+ 32045: {'neg': 0.0, 'neu': 0.723, 'pos': 0.277, 'compound': 0.3182},
+ 32046: {'neg': 0.0, 'neu': 0.758, 'pos': 0.242, 'compound': 0.4926},
+ 32047: {'neg': 0.0, 'neu': 0.47, 'pos': 0.53, 'compound': 0.836},
+ 32048: {'neg': 0.0, 'neu': 0.73, 'pos': 0.27, 'compound': 0.5719},
+ 32049: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32050: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32051: {'neg': 0.0, 'neu': 0.576, 'pos': 0.424, 'compound': 0.8104},
+ 32052: {'neg': 0.0, 'neu': 0.787, 'pos': 0.213, 'compound': 0.5859},
+ 32053: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32054: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32055: {'neg': 0.0, 'neu': 0.859, 'pos': 0.141, 'compound': 0.507},
+ 32056: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32057: {'neg': 0.351, 'neu': 0.594, 'pos': 0.054, 'compound': -0.7184},
+ 32058: {'neg': 0.0, 'neu': 0.552, 'pos': 0.448, 'compound': 0.807},
+ 32059: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32060: {'neg': 0.109, 'neu': 0.891, 'pos': 0.0, 'compound': -0.296},
+ 32061: {'neg': 0.0, 'neu': 0.377, 'pos': 0.623, 'compound': 0.9423},
+ 32062: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32063: {'neg': 0.225, 'neu': 0.775, 'pos': 0.0, 'compound': -0.4404},
+ 32064: {'neg': 0.0, 'neu': 0.538, 'pos': 0.462, 'compound': 0.8225},
+ 32065: {'neg': 0.084, 'neu': 0.698, 'pos': 0.218, 'compound': 0.5915},
+ 32066: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32067: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32068: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32069: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32070: {'neg': 0.0, 'neu': 0.619, 'pos': 0.381, 'compound': 0.5719},
+ 32071: {'neg': 0.245, 'neu': 0.632, 'pos': 0.123, 'compound': -0.4767},
+ 32072: {'neg': 0.249, 'neu': 0.667, 'pos': 0.084, 'compound': -0.5736},
+ 32073: {'neg': 0.0, 'neu': 0.668, 'pos': 0.332, 'compound': 0.755},
+ 32074: {'neg': 0.0, 'neu': 0.755, 'pos': 0.245, 'compound': 0.5994},
+ 32075: {'neg': 0.0, 'neu': 0.575, 'pos': 0.425, 'compound': 0.5719},
+ 32076: {'neg': 0.195, 'neu': 0.707, 'pos': 0.098, 'compound': -0.3515},
+ 32077: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32078: {'neg': 0.0, 'neu': 0.815, 'pos': 0.185, 'compound': 0.3612},
+ 32079: {'neg': 0.153, 'neu': 0.625, 'pos': 0.222, 'compound': 0.25},
+ 32080: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32081: {'neg': 0.0, 'neu': 0.738, 'pos': 0.262, 'compound': 0.4927},
+ 32082: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32083: {'neg': 0.0, 'neu': 0.575, 'pos': 0.425, 'compound': 0.5719},
+ 32084: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32085: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32086: {'neg': 0.0, 'neu': 0.711, 'pos': 0.289, 'compound': 0.7845},
+ 32087: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32088: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32089: {'neg': 0.15, 'neu': 0.85, 'pos': 0.0, 'compound': -0.3182},
+ 32090: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32091: {'neg': 0.0, 'neu': 0.928, 'pos': 0.072, 'compound': 0.1779},
+ 32092: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32093: {'neg': 0.0, 'neu': 0.781, 'pos': 0.219, 'compound': 0.4738},
+ 32094: {'neg': 0.0, 'neu': 0.738, 'pos': 0.262, 'compound': 0.4926},
+ 32095: {'neg': 0.0, 'neu': 0.804, 'pos': 0.196, 'compound': 0.296},
+ 32096: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32097: {'neg': 0.0, 'neu': 0.721, 'pos': 0.279, 'compound': 0.5399},
+ 32098: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32099: {'neg': 0.0, 'neu': 0.756, 'pos': 0.244, 'compound': 0.6696},
+ 32100: {'neg': 0.136, 'neu': 0.733, 'pos': 0.131, 'compound': -0.0258},
+ 32101: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32102: {'neg': 0.0, 'neu': 0.678, 'pos': 0.322, 'compound': 0.6467},
+ 32103: {'neg': 0.0, 'neu': 0.933, 'pos': 0.067, 'compound': 0.0772},
+ 32104: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32105: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32106: {'neg': 0.136, 'neu': 0.864, 'pos': 0.0, 'compound': -0.296},
+ 32107: {'neg': 0.272, 'neu': 0.494, 'pos': 0.235, 'compound': -0.0772},
+ 32108: {'neg': 0.258, 'neu': 0.742, 'pos': 0.0, 'compound': -0.7096},
+ 32109: {'neg': 0.0, 'neu': 0.737, 'pos': 0.263, 'compound': 0.6908},
+ 32110: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32111: {'neg': 0.0, 'neu': 0.822, 'pos': 0.178, 'compound': 0.3818},
+ 32112: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32113: {'neg': 0.0, 'neu': 0.755, 'pos': 0.245, 'compound': 0.7579},
+ 32114: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32115: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32116: {'neg': 0.0, 'neu': 0.681, 'pos': 0.319, 'compound': 0.7257},
+ 32117: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32118: {'neg': 0.0, 'neu': 0.549, 'pos': 0.451, 'compound': 0.8126},
+ 32119: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32120: {'neg': 0.0, 'neu': 0.846, 'pos': 0.154, 'compound': 0.4939},
+ 32121: {'neg': 0.0, 'neu': 0.572, 'pos': 0.428, 'compound': 0.6696},
+ 32122: {'neg': 0.0, 'neu': 0.848, 'pos': 0.152, 'compound': 0.3252},
+ 32123: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32124: {'neg': 0.205, 'neu': 0.719, 'pos': 0.075, 'compound': -0.6103},
+ 32125: {'neg': 0.0, 'neu': 0.7, 'pos': 0.3, 'compound': 0.8074},
+ 32126: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32127: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32128: {'neg': 0.0, 'neu': 0.519, 'pos': 0.481, 'compound': 0.5719},
+ 32129: {'neg': 0.165, 'neu': 0.835, 'pos': 0.0, 'compound': -0.4157},
+ 32130: {'neg': 0.0, 'neu': 0.192, 'pos': 0.808, 'compound': 0.6369},
+ 32131: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32132: {'neg': 0.286, 'neu': 0.714, 'pos': 0.0, 'compound': -0.25},
+ 32133: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32134: {'neg': 0.239, 'neu': 0.761, 'pos': 0.0, 'compound': -0.296},
+ 32135: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32136: {'neg': 0.0, 'neu': 0.78, 'pos': 0.22, 'compound': 0.7351},
+ 32137: {'neg': 0.19, 'neu': 0.664, 'pos': 0.146, 'compound': -0.0},
+ 32138: {'neg': 0.0, 'neu': 0.726, 'pos': 0.274, 'compound': 0.6476},
+ 32139: {'neg': 0.17, 'neu': 0.714, 'pos': 0.116, 'compound': -0.2477},
+ 32140: {'neg': 0.122, 'neu': 0.756, 'pos': 0.122, 'compound': 0.0},
+ 32141: {'neg': 0.0, 'neu': 0.68, 'pos': 0.32, 'compound': 0.5106},
+ 32142: {'neg': 0.302, 'neu': 0.698, 'pos': 0.0, 'compound': -0.5994},
+ 32143: {'neg': 0.0, 'neu': 0.663, 'pos': 0.337, 'compound': 0.7249},
+ 32144: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32145: {'neg': 0.0, 'neu': 0.663, 'pos': 0.337, 'compound': 0.7249},
+ 32146: {'neg': 0.0, 'neu': 0.858, 'pos': 0.142, 'compound': 0.5859},
+ 32147: {'neg': 0.0, 'neu': 0.796, 'pos': 0.204, 'compound': 0.6249},
+ 32148: {'neg': 0.262, 'neu': 0.664, 'pos': 0.073, 'compound': -0.7506},
+ 32149: {'neg': 0.0, 'neu': 0.816, 'pos': 0.184, 'compound': 0.3089},
+ 32150: {'neg': 0.0, 'neu': 0.5, 'pos': 0.5, 'compound': 0.6124},
+ 32151: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32152: {'neg': 0.0, 'neu': 0.637, 'pos': 0.363, 'compound': 0.6114},
+ 32153: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32154: {'neg': 0.315, 'neu': 0.554, 'pos': 0.131, 'compound': -0.5667},
+ 32155: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32156: {'neg': 0.172, 'neu': 0.699, 'pos': 0.129, 'compound': -0.2924},
+ 32157: {'neg': 0.444, 'neu': 0.556, 'pos': 0.0, 'compound': -0.34},
+ 32158: {'neg': 0.0, 'neu': 0.753, 'pos': 0.247, 'compound': 0.508},
+ 32159: {'neg': 0.0, 'neu': 0.579, 'pos': 0.421, 'compound': 0.6249},
+ 32160: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32161: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32162: {'neg': 0.307, 'neu': 0.693, 'pos': 0.0, 'compound': -0.6508},
+ 32163: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32164: {'neg': 0.147, 'neu': 0.853, 'pos': 0.0, 'compound': -0.2263},
+ 32165: {'neg': 0.076, 'neu': 0.859, 'pos': 0.066, 'compound': -0.0516},
+ 32166: {'neg': 0.412, 'neu': 0.588, 'pos': 0.0, 'compound': -0.4215},
+ 32167: {'neg': 0.0, 'neu': 0.663, 'pos': 0.337, 'compound': 0.7249},
+ 32168: {'neg': 0.0, 'neu': 0.663, 'pos': 0.337, 'compound': 0.7249},
+ 32169: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32170: {'neg': 0.217, 'neu': 0.667, 'pos': 0.117, 'compound': -0.4215},
+ 32171: {'neg': 0.33, 'neu': 0.67, 'pos': 0.0, 'compound': -0.7088},
+ 32172: {'neg': 0.0, 'neu': 0.781, 'pos': 0.219, 'compound': 0.6369},
+ 32173: {'neg': 0.0, 'neu': 0.782, 'pos': 0.218, 'compound': 0.4199},
+ 32174: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32175: {'neg': 0.0, 'neu': 0.631, 'pos': 0.369, 'compound': 0.8478},
+ 32176: {'neg': 0.13, 'neu': 0.5, 'pos': 0.37, 'compound': 0.5267},
+ 32177: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32178: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32179: {'neg': 0.0, 'neu': 0.667, 'pos': 0.333, 'compound': 0.4588},
+ 32180: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32181: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32182: {'neg': 0.0, 'neu': 0.563, 'pos': 0.437, 'compound': 0.4767},
+ 32183: {'neg': 0.132, 'neu': 0.686, 'pos': 0.181, 'compound': 0.25},
+ 32184: {'neg': 0.092, 'neu': 0.751, 'pos': 0.156, 'compound': 0.0258},
+ 32185: {'neg': 0.0, 'neu': 0.874, 'pos': 0.126, 'compound': 0.0772},
+ 32186: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32187: {'neg': 0.552, 'neu': 0.448, 'pos': 0.0, 'compound': -0.8126},
+ 32188: {'neg': 0.122, 'neu': 0.878, 'pos': 0.0, 'compound': -0.4939},
+ 32189: {'neg': 0.0, 'neu': 0.548, 'pos': 0.452, 'compound': 0.7644},
+ 32190: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32191: {'neg': 0.0, 'neu': 0.534, 'pos': 0.466, 'compound': 0.5413},
+ 32192: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32193: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32194: {'neg': 0.124, 'neu': 0.876, 'pos': 0.0, 'compound': -0.1759},
+ 32195: {'neg': 0.0, 'neu': 0.878, 'pos': 0.122, 'compound': 0.3612},
+ 32196: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32197: {'neg': 0.0, 'neu': 0.878, 'pos': 0.122, 'compound': 0.5399},
+ 32198: {'neg': 0.0, 'neu': 0.66, 'pos': 0.34, 'compound': 0.5574},
+ 32199: {'neg': 0.0, 'neu': 0.675, 'pos': 0.325, 'compound': 0.5229},
+ 32200: {'neg': 0.427, 'neu': 0.494, 'pos': 0.078, 'compound': -0.9002},
+ 32201: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32202: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32203: {'neg': 0.0, 'neu': 0.571, 'pos': 0.429, 'compound': 0.4588},
+ 32204: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32205: {'neg': 0.395, 'neu': 0.605, 'pos': 0.0, 'compound': -0.8689},
+ 32206: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32207: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32208: {'neg': 0.342, 'neu': 0.455, 'pos': 0.203, 'compound': -0.7783},
+ 32209: {'neg': 0.0, 'neu': 0.781, 'pos': 0.219, 'compound': 0.6369},
+ 32210: {'neg': 0.0, 'neu': 0.778, 'pos': 0.222, 'compound': 0.7177},
+ 32211: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32212: {'neg': 0.182, 'neu': 0.556, 'pos': 0.263, 'compound': 0.1531},
+ 32213: {'neg': 0.0, 'neu': 0.741, 'pos': 0.259, 'compound': 0.4199},
+ 32214: {'neg': 0.319, 'neu': 0.469, 'pos': 0.211, 'compound': -0.2131},
+ 32215: {'neg': 0.0, 'neu': 0.769, 'pos': 0.231, 'compound': 0.6369},
+ 32216: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32217: {'neg': 0.398, 'neu': 0.602, 'pos': 0.0, 'compound': -0.872},
+ 32218: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32219: {'neg': 0.0, 'neu': 0.72, 'pos': 0.28, 'compound': 0.5423},
+ 32220: {'neg': 0.0, 'neu': 0.809, 'pos': 0.191, 'compound': 0.5423},
+ 32221: {'neg': 0.0, 'neu': 0.517, 'pos': 0.483, 'compound': 0.8126},
+ 32222: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32223: {'neg': 0.0, 'neu': 0.741, 'pos': 0.259, 'compound': 0.6369},
+ 32224: {'neg': 0.17, 'neu': 0.769, 'pos': 0.06, 'compound': -0.4588},
+ 32225: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32226: {'neg': 0.0, 'neu': 0.734, 'pos': 0.266, 'compound': 0.6114},
+ 32227: {'neg': 0.0, 'neu': 0.432, 'pos': 0.568, 'compound': 0.836},
+ 32228: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32229: {'neg': 0.308, 'neu': 0.602, 'pos': 0.09, 'compound': -0.7778},
+ 32230: {'neg': 0.0, 'neu': 0.828, 'pos': 0.172, 'compound': 0.3612},
+ 32231: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32232: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32233: {'neg': 0.134, 'neu': 0.671, 'pos': 0.195, 'compound': 0.25},
+ 32234: {'neg': 0.22, 'neu': 0.78, 'pos': 0.0, 'compound': -0.5255},
+ 32235: {'neg': 0.0, 'neu': 0.842, 'pos': 0.158, 'compound': 0.4939},
+ 32236: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32237: {'neg': 0.0, 'neu': 0.578, 'pos': 0.422, 'compound': 0.7635},
+ 32238: {'neg': 0.0, 'neu': 0.81, 'pos': 0.19, 'compound': 0.6652},
+ 32239: {'neg': 0.375, 'neu': 0.625, 'pos': 0.0, 'compound': -0.8402},
+ 32240: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32241: {'neg': 0.0, 'neu': 0.885, 'pos': 0.115, 'compound': 0.296},
+ 32242: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32243: {'neg': 0.0, 'neu': 0.791, 'pos': 0.209, 'compound': 0.6696},
+ 32244: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32245: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32246: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32247: {'neg': 0.0, 'neu': 0.839, 'pos': 0.161, 'compound': 0.3612},
+ 32248: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32249: {'neg': 0.295, 'neu': 0.449, 'pos': 0.256, 'compound': -0.1774},
+ 32250: {'neg': 0.267, 'neu': 0.473, 'pos': 0.26, 'compound': -0.024},
+ 32251: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32252: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32253: {'neg': 0.0, 'neu': 0.736, 'pos': 0.264, 'compound': 0.5562},
+ 32254: {'neg': 0.0, 'neu': 0.81, 'pos': 0.19, 'compound': 0.5093},
+ 32255: {'neg': 0.195, 'neu': 0.805, 'pos': 0.0, 'compound': -0.4404},
+ 32256: {'neg': 0.0, 'neu': 0.36, 'pos': 0.64, 'compound': 0.7964},
+ 32257: {'neg': 0.11, 'neu': 0.784, 'pos': 0.106, 'compound': -0.0258},
+ 32258: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32259: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32260: {'neg': 0.0, 'neu': 0.575, 'pos': 0.425, 'compound': 0.5719},
+ 32261: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32262: {'neg': 0.091, 'neu': 0.909, 'pos': 0.0, 'compound': -0.0772},
+ 32263: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32264: {'neg': 0.0, 'neu': 0.784, 'pos': 0.216, 'compound': 0.0258},
+ 32265: {'neg': 0.244, 'neu': 0.756, 'pos': 0.0, 'compound': -0.4404},
+ 32266: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32267: {'neg': 0.0, 'neu': 0.785, 'pos': 0.215, 'compound': 0.6249},
+ 32268: {'neg': 0.212, 'neu': 0.606, 'pos': 0.182, 'compound': -0.2003},
+ 32269: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32270: {'neg': 0.0, 'neu': 0.756, 'pos': 0.244, 'compound': 0.4404},
+ 32271: {'neg': 0.51, 'neu': 0.49, 'pos': 0.0, 'compound': -0.9092},
+ 32272: {'neg': 0.212, 'neu': 0.788, 'pos': 0.0, 'compound': -0.5423},
+ 32273: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32274: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32275: {'neg': 0.0, 'neu': 0.86, 'pos': 0.14, 'compound': 0.3818},
+ 32276: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32277: {'neg': 0.058, 'neu': 0.942, 'pos': 0.0, 'compound': -0.0276},
+ 32278: {'neg': 0.0, 'neu': 0.663, 'pos': 0.337, 'compound': 0.7249},
+ 32279: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32280: {'neg': 0.0, 'neu': 0.913, 'pos': 0.087, 'compound': 0.2707},
+ 32281: {'neg': 0.0, 'neu': 0.761, 'pos': 0.239, 'compound': 0.6476},
+ 32282: {'neg': 0.0, 'neu': 0.352, 'pos': 0.648, 'compound': 0.8478},
+ 32283: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32284: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32285: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32286: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32287: {'neg': 0.0, 'neu': 0.527, 'pos': 0.473, 'compound': 0.8007},
+ 32288: {'neg': 0.0, 'neu': 0.882, 'pos': 0.118, 'compound': 0.4215},
+ 32289: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32290: {'neg': 0.265, 'neu': 0.258, 'pos': 0.477, 'compound': 0.3919},
+ 32291: {'neg': 0.162, 'neu': 0.662, 'pos': 0.176, 'compound': 0.0516},
+ 32292: {'neg': 0.157, 'neu': 0.843, 'pos': 0.0, 'compound': -0.2617},
+ 32293: {'neg': 0.0, 'neu': 0.747, 'pos': 0.253, 'compound': 0.5242},
+ 32294: {'neg': 0.173, 'neu': 0.63, 'pos': 0.197, 'compound': 0.0772},
+ 32295: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32296: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32297: {'neg': 0.25, 'neu': 0.75, 'pos': 0.0, 'compound': -0.1695},
+ 32298: {'neg': 0.514, 'neu': 0.486, 'pos': 0.0, 'compound': -0.4902},
+ 32299: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32300: {'neg': 0.0, 'neu': 0.71, 'pos': 0.29, 'compound': 0.6696},
+ 32301: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32302: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32303: {'neg': 0.097, 'neu': 0.672, 'pos': 0.231, 'compound': 0.4926},
+ 32304: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32305: {'neg': 0.271, 'neu': 0.607, 'pos': 0.121, 'compound': -0.6369},
+ 32306: {'neg': 0.0, 'neu': 0.755, 'pos': 0.245, 'compound': 0.4404},
+ 32307: {'neg': 0.0, 'neu': 0.769, 'pos': 0.231, 'compound': 0.6369},
+ 32308: {'neg': 0.186, 'neu': 0.814, 'pos': 0.0, 'compound': -0.1531},
+ 32309: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32310: {'neg': 0.139, 'neu': 0.673, 'pos': 0.188, 'compound': 0.2732},
+ 32311: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32312: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32313: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32314: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32315: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32316: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32317: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32318: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32319: {'neg': 0.436, 'neu': 0.564, 'pos': 0.0, 'compound': -0.9118},
+ 32320: {'neg': 0.438, 'neu': 0.358, 'pos': 0.204, 'compound': -0.5542},
+ 32321: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32322: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32323: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32324: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32325: {'neg': 0.0, 'neu': 0.843, 'pos': 0.157, 'compound': 0.5499},
+ 32326: {'neg': 0.17, 'neu': 0.83, 'pos': 0.0, 'compound': -0.5696},
+ 32327: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32328: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32329: {'neg': 0.085, 'neu': 0.667, 'pos': 0.248, 'compound': 0.5719},
+ 32330: {'neg': 0.0, 'neu': 0.741, 'pos': 0.259, 'compound': 0.7425},
+ 32331: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32332: {'neg': 0.0, 'neu': 0.572, 'pos': 0.428, 'compound': 0.5775},
+ 32333: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32334: {'neg': 0.508, 'neu': 0.492, 'pos': 0.0, 'compound': -0.4767},
+ 32335: {'neg': 0.154, 'neu': 0.75, 'pos': 0.096, 'compound': -0.34},
+ 32336: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32337: {'neg': 0.119, 'neu': 0.702, 'pos': 0.179, 'compound': 0.2433},
+ 32338: {'neg': 0.217, 'neu': 0.783, 'pos': 0.0, 'compound': -0.3612},
+ 32339: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32340: {'neg': 0.157, 'neu': 0.843, 'pos': 0.0, 'compound': -0.4215},
+ 32341: {'neg': 0.0, 'neu': 0.828, 'pos': 0.172, 'compound': 0.4404},
+ 32342: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32343: {'neg': 0.136, 'neu': 0.864, 'pos': 0.0, 'compound': -0.296},
+ 32344: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32345: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32346: {'neg': 0.0, 'neu': 0.213, 'pos': 0.787, 'compound': 0.8126},
+ 32347: {'neg': 0.0, 'neu': 0.855, 'pos': 0.145, 'compound': 0.296},
+ 32348: {'neg': 0.095, 'neu': 0.711, 'pos': 0.195, 'compound': 0.3987},
+ 32349: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32350: {'neg': 0.0, 'neu': 0.828, 'pos': 0.172, 'compound': 0.4019},
+ 32351: {'neg': 0.0, 'neu': 0.699, 'pos': 0.301, 'compound': 0.68},
+ 32352: {'neg': 0.235, 'neu': 0.765, 'pos': 0.0, 'compound': -0.5242},
+ 32353: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32354: {'neg': 0.379, 'neu': 0.525, 'pos': 0.097, 'compound': -0.8625},
+ 32355: {'neg': 0.0, 'neu': 0.567, 'pos': 0.433, 'compound': 0.8553},
+ 32356: {'neg': 0.0, 'neu': 0.834, 'pos': 0.166, 'compound': 0.1007},
+ 32357: {'neg': 0.0, 'neu': 0.726, 'pos': 0.274, 'compound': 0.6476},
+ 32358: {'neg': 0.117, 'neu': 0.883, 'pos': 0.0, 'compound': -0.1511},
+ 32359: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32360: {'neg': 0.16, 'neu': 0.729, 'pos': 0.111, 'compound': -0.3096},
+ 32361: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32362: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32363: {'neg': 0.0, 'neu': 0.637, 'pos': 0.363, 'compound': 0.7893},
+ 32364: {'neg': 0.0, 'neu': 0.884, 'pos': 0.116, 'compound': 0.4404},
+ 32365: {'neg': 0.0, 'neu': 0.775, 'pos': 0.225, 'compound': 0.4404},
+ 32366: {'neg': 0.13, 'neu': 0.87, 'pos': 0.0, 'compound': -0.4019},
+ 32367: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32368: {'neg': 0.0, 'neu': 0.575, 'pos': 0.425, 'compound': 0.5719},
+ 32369: {'neg': 0.0, 'neu': 0.775, 'pos': 0.225, 'compound': 0.4926},
+ 32370: {'neg': 0.0, 'neu': 0.737, 'pos': 0.263, 'compound': 0.3612},
+ 32371: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32372: {'neg': 0.211, 'neu': 0.56, 'pos': 0.229, 'compound': -0.128},
+ 32373: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32374: {'neg': 0.0, 'neu': 0.663, 'pos': 0.337, 'compound': 0.7249},
+ 32375: {'neg': 0.0, 'neu': 0.336, 'pos': 0.664, 'compound': 0.836},
+ 32376: {'neg': 0.0, 'neu': 0.631, 'pos': 0.369, 'compound': 0.7645},
+ 32377: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32378: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32379: {'neg': 0.246, 'neu': 0.594, 'pos': 0.16, 'compound': -0.2528},
+ 32380: {'neg': 0.242, 'neu': 0.505, 'pos': 0.253, 'compound': 0.0258},
+ 32381: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32382: {'neg': 0.0, 'neu': 0.793, 'pos': 0.207, 'compound': 0.5242},
+ 32383: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32384: {'neg': 0.0, 'neu': 0.752, 'pos': 0.248, 'compound': 0.5106},
+ 32385: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32386: {'neg': 0.0, 'neu': 0.753, 'pos': 0.247, 'compound': 0.508},
+ 32387: {'neg': 0.0, 'neu': 0.676, 'pos': 0.324, 'compound': 0.8016},
+ 32388: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32389: {'neg': 0.365, 'neu': 0.635, 'pos': 0.0, 'compound': -0.3182},
+ 32390: {'neg': 0.244, 'neu': 0.333, 'pos': 0.422, 'compound': 0.3818},
+ 32391: {'neg': 0.0, 'neu': 0.638, 'pos': 0.362, 'compound': 0.8689},
+ 32392: {'neg': 0.0, 'neu': 0.75, 'pos': 0.25, 'compound': 0.7468},
+ 32393: {'neg': 0.267, 'neu': 0.733, 'pos': 0.0, 'compound': -0.6124},
+ 32394: {'neg': 0.0, 'neu': 0.814, 'pos': 0.186, 'compound': 0.6249},
+ 32395: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32396: {'neg': 0.426, 'neu': 0.574, 'pos': 0.0, 'compound': -0.8462},
+ 32397: {'neg': 0.0, 'neu': 0.878, 'pos': 0.122, 'compound': 0.3612},
+ 32398: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32399: {'neg': 0.0, 'neu': 0.756, 'pos': 0.244, 'compound': 0.6369},
+ 32400: {'neg': 0.115, 'neu': 0.885, 'pos': 0.0, 'compound': -0.0772},
+ 32401: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32402: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32403: {'neg': 0.0, 'neu': 0.779, 'pos': 0.221, 'compound': 0.1779},
+ 32404: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32405: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32406: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32407: {'neg': 0.077, 'neu': 0.77, 'pos': 0.154, 'compound': 0.3802},
+ 32408: {'neg': 0.0, 'neu': 0.651, 'pos': 0.349, 'compound': 0.6467},
+ 32409: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32410: {'neg': 0.0, 'neu': 0.69, 'pos': 0.31, 'compound': 0.6696},
+ 32411: {'neg': 0.0, 'neu': 0.642, 'pos': 0.358, 'compound': 0.5994},
+ 32412: {'neg': 0.0, 'neu': 0.709, 'pos': 0.291, 'compound': 0.5719},
+ 32413: {'neg': 0.331, 'neu': 0.515, 'pos': 0.154, 'compound': -0.34},
+ 32414: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32415: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32416: {'neg': 0.0, 'neu': 0.543, 'pos': 0.457, 'compound': 0.6369},
+ 32417: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32418: {'neg': 0.0, 'neu': 0.728, 'pos': 0.272, 'compound': 0.3054},
+ 32419: {'neg': 0.0, 'neu': 0.633, 'pos': 0.367, 'compound': 0.4404},
+ 32420: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32421: {'neg': 0.363, 'neu': 0.637, 'pos': 0.0, 'compound': -0.8126},
+ 32422: {'neg': 0.0, 'neu': 0.816, 'pos': 0.184, 'compound': 0.5255},
+ 32423: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32424: {'neg': 0.0, 'neu': 0.888, 'pos': 0.112, 'compound': 0.4404},
+ 32425: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32426: {'neg': 0.0, 'neu': 0.685, 'pos': 0.315, 'compound': 0.3182},
+ 32427: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32428: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32429: {'neg': 0.242, 'neu': 0.758, 'pos': 0.0, 'compound': -0.1511},
+ 32430: {'neg': 0.0, 'neu': 0.795, 'pos': 0.205, 'compound': 0.2023},
+ 32431: {'neg': 0.0, 'neu': 0.674, 'pos': 0.326, 'compound': 0.7003},
+ 32432: {'neg': 0.0, 'neu': 0.8, 'pos': 0.2, 'compound': 0.4588},
+ 32433: {'neg': 0.24, 'neu': 0.521, 'pos': 0.24, 'compound': -0.25},
+ 32434: {'neg': 0.221, 'neu': 0.779, 'pos': 0.0, 'compound': -0.6096},
+ 32435: {'neg': 0.173, 'neu': 0.827, 'pos': 0.0, 'compound': -0.4137},
+ 32436: {'neg': 0.0, 'neu': 0.773, 'pos': 0.227, 'compound': 0.6249},
+ 32437: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32438: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32439: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32440: {'neg': 0.522, 'neu': 0.478, 'pos': 0.0, 'compound': -0.7613},
+ 32441: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32442: {'neg': 0.0, 'neu': 0.648, 'pos': 0.352, 'compound': 0.5859},
+ 32443: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32444: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32445: {'neg': 0.0, 'neu': 0.818, 'pos': 0.182, 'compound': 0.4404},
+ 32446: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32447: {'neg': 0.0, 'neu': 0.588, 'pos': 0.412, 'compound': 0.8271},
+ 32448: {'neg': 0.0, 'neu': 0.62, 'pos': 0.38, 'compound': 0.8614},
+ 32449: {'neg': 0.186, 'neu': 0.483, 'pos': 0.331, 'compound': 0.2732},
+ 32450: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32451: {'neg': 0.0, 'neu': 0.614, 'pos': 0.386, 'compound': 0.6588},
+ 32452: {'neg': 0.0, 'neu': 0.601, 'pos': 0.399, 'compound': 0.807},
+ 32453: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32454: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32455: {'neg': 0.0, 'neu': 0.684, 'pos': 0.316, 'compound': 0.5719},
+ 32456: {'neg': 0.0, 'neu': 0.863, 'pos': 0.137, 'compound': 0.1511},
+ 32457: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32458: {'neg': 0.0, 'neu': 0.615, 'pos': 0.385, 'compound': 0.7845},
+ 32459: {'neg': 0.0, 'neu': 0.715, 'pos': 0.285, 'compound': 0.6114},
+ 32460: {'neg': 0.194, 'neu': 0.576, 'pos': 0.23, 'compound': 0.128},
+ 32461: {'neg': 0.0, 'neu': 0.738, 'pos': 0.262, 'compound': 0.4926},
+ 32462: {'neg': 0.0, 'neu': 0.755, 'pos': 0.245, 'compound': 0.7574},
+ 32463: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32464: {'neg': 0.0, 'neu': 0.764, 'pos': 0.236, 'compound': 0.5719},
+ 32465: {'neg': 0.0, 'neu': 0.543, 'pos': 0.457, 'compound': 0.9153},
+ 32466: {'neg': 0.067, 'neu': 0.718, 'pos': 0.215, 'compound': 0.5994},
+ 32467: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32468: {'neg': 0.0, 'neu': 0.769, 'pos': 0.231, 'compound': 0.4019},
+ 32469: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32470: {'neg': 0.113, 'neu': 0.547, 'pos': 0.34, 'compound': 0.7385},
+ 32471: {'neg': 0.0, 'neu': 0.575, 'pos': 0.425, 'compound': 0.5719},
+ 32472: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32473: {'neg': 0.0, 'neu': 0.919, 'pos': 0.081, 'compound': 0.128},
+ 32474: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32475: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32476: {'neg': 0.316, 'neu': 0.684, 'pos': 0.0, 'compound': -0.7184},
+ 32477: {'neg': 0.0, 'neu': 0.625, 'pos': 0.375, 'compound': 0.6369},
+ 32478: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32479: {'neg': 0.073, 'neu': 0.927, 'pos': 0.0, 'compound': -0.126},
+ 32480: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32481: {'neg': 0.0, 'neu': 0.734, 'pos': 0.266, 'compound': 0.4404},
+ 32482: {'neg': 0.0, 'neu': 0.861, 'pos': 0.139, 'compound': 0.3774},
+ 32483: {'neg': 0.098, 'neu': 0.759, 'pos': 0.143, 'compound': 0.25},
+ 32484: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32485: {'neg': 0.069, 'neu': 0.872, 'pos': 0.06, 'compound': -0.0516},
+ 32486: {'neg': 0.129, 'neu': 0.625, 'pos': 0.246, 'compound': 0.2023},
+ 32487: {'neg': 0.0, 'neu': 0.367, 'pos': 0.633, 'compound': 0.7845},
+ 32488: {'neg': 0.0, 'neu': 0.882, 'pos': 0.118, 'compound': 0.25},
+ 32489: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32490: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32491: {'neg': 0.309, 'neu': 0.691, 'pos': 0.0, 'compound': -0.6562},
+ 32492: {'neg': 0.208, 'neu': 0.678, 'pos': 0.114, 'compound': -0.296},
+ 32493: {'neg': 0.0, 'neu': 0.819, 'pos': 0.181, 'compound': 0.4753},
+ 32494: {'neg': 0.372, 'neu': 0.628, 'pos': 0.0, 'compound': -0.836},
+ 32495: {'neg': 0.224, 'neu': 0.776, 'pos': 0.0, 'compound': -0.5994},
+ 32496: {'neg': 0.0, 'neu': 0.739, 'pos': 0.261, 'compound': 0.6476},
+ 32497: {'neg': 0.0, 'neu': 0.748, 'pos': 0.252, 'compound': 0.5229},
+ 32498: {'neg': 0.307, 'neu': 0.693, 'pos': 0.0, 'compound': -0.6114},
+ 32499: {'neg': 0.0, 'neu': 0.708, 'pos': 0.292, 'compound': 0.7644},
+ 32500: {'neg': 0.0, 'neu': 0.748, 'pos': 0.252, 'compound': 0.5719},
+ 32501: {'neg': 0.114, 'neu': 0.886, 'pos': 0.0, 'compound': -0.2914},
+ 32502: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32503: {'neg': 0.0, 'neu': 0.667, 'pos': 0.333, 'compound': 0.6114},
+ 32504: {'neg': 0.0, 'neu': 0.734, 'pos': 0.266, 'compound': 0.4404},
+ 32505: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32506: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32507: {'neg': 0.339, 'neu': 0.661, 'pos': 0.0, 'compound': -0.7689},
+ 32508: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32509: {'neg': 0.0, 'neu': 0.695, 'pos': 0.305, 'compound': 0.69},
+ 32510: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32511: {'neg': 0.0, 'neu': 0.514, 'pos': 0.486, 'compound': 0.8209},
+ 32512: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32513: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32514: {'neg': 0.0, 'neu': 0.879, 'pos': 0.121, 'compound': 0.2003},
+ 32515: {'neg': 0.0, 'neu': 0.512, 'pos': 0.488, 'compound': 0.9533},
+ 32516: {'neg': 0.0, 'neu': 0.857, 'pos': 0.143, 'compound': 0.3612},
+ 32517: {'neg': 0.238, 'neu': 0.762, 'pos': 0.0, 'compound': -0.3612},
+ 32518: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32519: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32520: {'neg': 0.0, 'neu': 0.894, 'pos': 0.106, 'compound': 0.0772},
+ 32521: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32522: {'neg': 0.234, 'neu': 0.766, 'pos': 0.0, 'compound': -0.5994},
+ 32523: {'neg': 0.306, 'neu': 0.694, 'pos': 0.0, 'compound': -0.7051},
+ 32524: {'neg': 0.0, 'neu': 0.543, 'pos': 0.457, 'compound': 0.7081},
+ 32525: {'neg': 0.0, 'neu': 0.857, 'pos': 0.143, 'compound': 0.3612},
+ 32526: {'neg': 0.0, 'neu': 0.936, 'pos': 0.064, 'compound': 0.0772},
+ 32527: {'neg': 0.0, 'neu': 0.859, 'pos': 0.141, 'compound': 0.2023},
+ 32528: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32529: {'neg': 0.0, 'neu': 0.526, 'pos': 0.474, 'compound': 0.872},
+ 32530: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32531: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32532: {'neg': 0.114, 'neu': 0.687, 'pos': 0.199, 'compound': 0.3786},
+ 32533: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32534: {'neg': 0.0, 'neu': 0.663, 'pos': 0.337, 'compound': 0.7249},
+ 32535: {'neg': 0.393, 'neu': 0.607, 'pos': 0.0, 'compound': -0.8434},
+ 32536: {'neg': 0.0, 'neu': 0.533, 'pos': 0.467, 'compound': 0.784},
+ 32537: {'neg': 0.0, 'neu': 0.519, 'pos': 0.481, 'compound': 0.5719},
+ 32538: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32539: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32540: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32541: {'neg': 0.322, 'neu': 0.461, 'pos': 0.217, 'compound': -0.1546},
+ 32542: {'neg': 0.1, 'neu': 0.788, 'pos': 0.112, 'compound': 0.0772},
+ 32543: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32544: {'neg': 0.0, 'neu': 0.565, 'pos': 0.435, 'compound': 0.8953},
+ 32545: {'neg': 0.0, 'neu': 0.615, 'pos': 0.385, 'compound': 0.3612},
+ 32546: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32547: {'neg': 0.135, 'neu': 0.437, 'pos': 0.428, 'compound': 0.7717},
+ 32548: {'neg': 0.0, 'neu': 0.727, 'pos': 0.273, 'compound': 0.128},
+ 32549: {'neg': 0.295, 'neu': 0.705, 'pos': 0.0, 'compound': -0.7964},
+ 32550: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32551: {'neg': 0.185, 'neu': 0.721, 'pos': 0.094, 'compound': -0.4404},
+ 32552: {'neg': 0.213, 'neu': 0.478, 'pos': 0.309, 'compound': 0.6644},
+ 32553: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32554: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32555: {'neg': 0.0, 'neu': 0.726, 'pos': 0.274, 'compound': 0.6476},
+ 32556: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32557: {'neg': 0.0, 'neu': 0.672, 'pos': 0.328, 'compound': 0.5994},
+ 32558: {'neg': 0.0, 'neu': 0.775, 'pos': 0.225, 'compound': 0.4927},
+ 32559: {'neg': 0.253, 'neu': 0.635, 'pos': 0.112, 'compound': -0.5972},
+ 32560: {'neg': 0.163, 'neu': 0.837, 'pos': 0.0, 'compound': -0.5423},
+ 32561: {'neg': 0.0, 'neu': 0.526, 'pos': 0.474, 'compound': 0.743},
+ 32562: {'neg': 0.234, 'neu': 0.565, 'pos': 0.202, 'compound': -0.1027},
+ 32563: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32564: {'neg': 0.0, 'neu': 0.694, 'pos': 0.306, 'compound': 0.296},
+ 32565: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32566: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32567: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32568: {'neg': 0.0, 'neu': 0.816, 'pos': 0.184, 'compound': 0.2023},
+ 32569: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32570: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32571: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32572: {'neg': 0.129, 'neu': 0.706, 'pos': 0.165, 'compound': 0.1531},
+ 32573: {'neg': 0.0, 'neu': 0.697, 'pos': 0.303, 'compound': 0.7269},
+ 32574: {'neg': 0.251, 'neu': 0.749, 'pos': 0.0, 'compound': -0.722},
+ 32575: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32576: {'neg': 0.0, 'neu': 0.781, 'pos': 0.219, 'compound': 0.1027},
+ 32577: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32578: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32579: {'neg': 0.0, 'neu': 0.519, 'pos': 0.481, 'compound': 0.5719},
+ 32580: {'neg': 0.118, 'neu': 0.882, 'pos': 0.0, 'compound': -0.0516},
+ 32581: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32582: {'neg': 0.0, 'neu': 0.732, 'pos': 0.268, 'compound': 0.5423},
+ 32583: {'neg': 0.146, 'neu': 0.854, 'pos': 0.0, 'compound': -0.34},
+ 32584: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32585: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32586: {'neg': 0.0, 'neu': 0.643, 'pos': 0.357, 'compound': 0.8309},
+ 32587: {'neg': 0.0, 'neu': 0.455, 'pos': 0.545, 'compound': 0.9183},
+ 32588: {'neg': 0.0, 'neu': 0.566, 'pos': 0.434, 'compound': 0.8261},
+ 32589: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32590: {'neg': 0.0, 'neu': 0.367, 'pos': 0.633, 'compound': 0.7845},
+ 32591: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32592: {'neg': 0.227, 'neu': 0.773, 'pos': 0.0, 'compound': -0.6597},
+ 32593: {'neg': 0.0, 'neu': 0.661, 'pos': 0.339, 'compound': 0.8481},
+ 32594: {'neg': 0.0, 'neu': 0.645, 'pos': 0.355, 'compound': 0.296},
+ 32595: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32596: {'neg': 0.424, 'neu': 0.576, 'pos': 0.0, 'compound': -0.5697},
+ 32597: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32598: {'neg': 0.0, 'neu': 0.865, 'pos': 0.135, 'compound': 0.3612},
+ 32599: {'neg': 0.0, 'neu': 0.671, 'pos': 0.329, 'compound': 0.6597},
+ 32600: {'neg': 0.0, 'neu': 0.734, 'pos': 0.266, 'compound': 0.4404},
+ 32601: {'neg': 0.0, 'neu': 0.357, 'pos': 0.643, 'compound': 0.9117},
+ 32602: {'neg': 0.0, 'neu': 0.83, 'pos': 0.17, 'compound': 0.6249},
+ 32603: {'neg': 0.0, 'neu': 0.717, 'pos': 0.283, 'compound': 0.7717},
+ 32604: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32605: {'neg': 0.115, 'neu': 0.885, 'pos': 0.0, 'compound': -0.0772},
+ 32606: {'neg': 0.181, 'neu': 0.705, 'pos': 0.115, 'compound': -0.3612},
+ 32607: {'neg': 0.0, 'neu': 0.847, 'pos': 0.153, 'compound': 0.2023},
+ 32608: {'neg': 0.0, 'neu': 0.566, 'pos': 0.434, 'compound': 0.91},
+ 32609: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32610: {'neg': 0.0, 'neu': 0.334, 'pos': 0.666, 'compound': 0.6114},
+ 32611: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32612: {'neg': 0.0, 'neu': 0.761, 'pos': 0.239, 'compound': 0.6239},
+ 32613: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32614: {'neg': 0.0, 'neu': 0.733, 'pos': 0.267, 'compound': 0.6124},
+ 32615: {'neg': 0.0, 'neu': 0.732, 'pos': 0.268, 'compound': 0.296},
+ 32616: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32617: {'neg': 0.0, 'neu': 0.513, 'pos': 0.487, 'compound': 0.5859},
+ 32618: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32619: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32620: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32621: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32622: {'neg': 0.0, 'neu': 0.714, 'pos': 0.286, 'compound': 0.6808},
+ 32623: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32624: {'neg': 0.0, 'neu': 0.77, 'pos': 0.23, 'compound': 0.4574},
+ 32625: {'neg': 0.0, 'neu': 0.371, 'pos': 0.629, 'compound': 0.9514},
+ 32626: {'neg': 0.439, 'neu': 0.303, 'pos': 0.258, 'compound': -0.34},
+ 32627: {'neg': 0.0, 'neu': 0.469, 'pos': 0.531, 'compound': 0.9287},
+ 32628: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32629: {'neg': 0.217, 'neu': 0.783, 'pos': 0.0, 'compound': -0.3612},
+ 32630: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32631: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32632: {'neg': 0.109, 'neu': 0.632, 'pos': 0.26, 'compound': 0.5106},
+ 32633: {'neg': 0.0, 'neu': 0.753, 'pos': 0.247, 'compound': 0.508},
+ 32634: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32635: {'neg': 0.255, 'neu': 0.745, 'pos': 0.0, 'compound': -0.34},
+ 32636: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32637: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32638: {'neg': 0.351, 'neu': 0.649, 'pos': 0.0, 'compound': -0.4019},
+ 32639: {'neg': 0.163, 'neu': 0.558, 'pos': 0.279, 'compound': 0.3612},
+ 32640: {'neg': 0.163, 'neu': 0.837, 'pos': 0.0, 'compound': -0.5106},
+ 32641: {'neg': 0.0, 'neu': 0.39, 'pos': 0.61, 'compound': 0.8555},
+ 32642: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32643: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32644: {'neg': 0.137, 'neu': 0.863, 'pos': 0.0, 'compound': -0.2263},
+ 32645: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32646: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32647: {'neg': 0.145, 'neu': 0.855, 'pos': 0.0, 'compound': -0.1759},
+ 32648: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32649: {'neg': 0.342, 'neu': 0.658, 'pos': 0.0, 'compound': -0.8309},
+ 32650: {'neg': 0.072, 'neu': 0.865, 'pos': 0.062, 'compound': -0.0516},
+ 32651: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32652: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32653: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32654: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32655: {'neg': 0.246, 'neu': 0.754, 'pos': 0.0, 'compound': -0.5983},
+ 32656: {'neg': 0.145, 'neu': 0.728, 'pos': 0.127, 'compound': -0.1258},
+ 32657: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32658: {'neg': 0.172, 'neu': 0.576, 'pos': 0.251, 'compound': 0.334},
+ 32659: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32660: {'neg': 0.117, 'neu': 0.417, 'pos': 0.466, 'compound': 0.8808},
+ 32661: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32662: {'neg': 0.389, 'neu': 0.611, 'pos': 0.0, 'compound': -0.6237},
+ 32663: {'neg': 0.0, 'neu': 0.641, 'pos': 0.359, 'compound': 0.4215},
+ 32664: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32665: {'neg': 0.0, 'neu': 0.523, 'pos': 0.477, 'compound': 0.8074},
+ 32666: {'neg': 0.211, 'neu': 0.403, 'pos': 0.386, 'compound': 0.6369},
+ 32667: {'neg': 0.0, 'neu': 0.724, 'pos': 0.276, 'compound': 0.6369},
+ 32668: {'neg': 0.0, 'neu': 0.593, 'pos': 0.407, 'compound': 0.5859},
+ 32669: {'neg': 0.0, 'neu': 0.683, 'pos': 0.317, 'compound': 0.7574},
+ 32670: {'neg': 0.272, 'neu': 0.634, 'pos': 0.093, 'compound': -0.5859},
+ 32671: {'neg': 0.0, 'neu': 0.595, 'pos': 0.405, 'compound': 0.6239},
+ 32672: {'neg': 0.095, 'neu': 0.647, 'pos': 0.259, 'compound': 0.5859},
+ 32673: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32674: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32675: {'neg': 0.0, 'neu': 0.884, 'pos': 0.116, 'compound': 0.4404},
+ 32676: {'neg': 0.21, 'neu': 0.79, 'pos': 0.0, 'compound': -0.4926},
+ 32677: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32678: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32679: {'neg': 0.0, 'neu': 0.787, 'pos': 0.213, 'compound': 0.4019},
+ 32680: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32681: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32682: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32683: {'neg': 0.0, 'neu': 0.775, 'pos': 0.225, 'compound': 0.4404},
+ 32684: {'neg': 0.0, 'neu': 0.83, 'pos': 0.17, 'compound': 0.5399},
+ 32685: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32686: {'neg': 0.0, 'neu': 0.775, 'pos': 0.225, 'compound': 0.4939},
+ 32687: {'neg': 0.0, 'neu': 0.742, 'pos': 0.258, 'compound': 0.5399},
+ 32688: {'neg': 0.0, 'neu': 0.767, 'pos': 0.233, 'compound': 0.7259},
+ 32689: {'neg': 0.339, 'neu': 0.661, 'pos': 0.0, 'compound': -0.5583},
+ 32690: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32691: {'neg': 0.0, 'neu': 0.776, 'pos': 0.224, 'compound': 0.3818},
+ 32692: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32693: {'neg': 0.0, 'neu': 0.715, 'pos': 0.285, 'compound': 0.636},
+ 32694: {'neg': 0.0, 'neu': 0.741, 'pos': 0.259, 'compound': 0.4215},
+ 32695: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32696: {'neg': 0.0, 'neu': 0.334, 'pos': 0.666, 'compound': 0.6114},
+ 32697: {'neg': 0.253, 'neu': 0.613, 'pos': 0.134, 'compound': -0.4767},
+ 32698: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32699: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32700: {'neg': 0.0, 'neu': 0.563, 'pos': 0.437, 'compound': 0.4767},
+ 32701: {'neg': 0.105, 'neu': 0.895, 'pos': 0.0, 'compound': -0.2755},
+ 32702: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32703: {'neg': 0.097, 'neu': 0.903, 'pos': 0.0, 'compound': -0.1027},
+ 32704: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32705: {'neg': 0.167, 'neu': 0.833, 'pos': 0.0, 'compound': -0.5267},
+ 32706: {'neg': 0.14, 'neu': 0.517, 'pos': 0.343, 'compound': 0.6705},
+ 32707: {'neg': 0.096, 'neu': 0.565, 'pos': 0.339, 'compound': 0.765},
+ 32708: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32709: {'neg': 0.33, 'neu': 0.67, 'pos': 0.0, 'compound': -0.8356},
+ 32710: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32711: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32712: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32713: {'neg': 0.0, 'neu': 0.663, 'pos': 0.337, 'compound': 0.7249},
+ 32714: {'neg': 0.0, 'neu': 0.421, 'pos': 0.579, 'compound': 0.6705},
+ 32715: {'neg': 0.322, 'neu': 0.678, 'pos': 0.0, 'compound': -0.2263},
+ 32716: {'neg': 0.153, 'neu': 0.584, 'pos': 0.263, 'compound': 0.3612},
+ 32717: {'neg': 0.0, 'neu': 0.839, 'pos': 0.161, 'compound': 0.3612},
+ 32718: {'neg': 0.167, 'neu': 0.759, 'pos': 0.074, 'compound': -0.5167},
+ 32719: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32720: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32721: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32722: {'neg': 0.0, 'neu': 0.139, 'pos': 0.861, 'compound': 0.7351},
+ 32723: {'neg': 0.211, 'neu': 0.789, 'pos': 0.0, 'compound': -0.4939},
+ 32724: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32725: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32726: {'neg': 0.136, 'neu': 0.65, 'pos': 0.214, 'compound': 0.2946},
+ 32727: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32728: {'neg': 0.0, 'neu': 0.526, 'pos': 0.474, 'compound': 0.5574},
+ 32729: {'neg': 0.259, 'neu': 0.741, 'pos': 0.0, 'compound': -0.7717},
+ 32730: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32731: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32732: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32733: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32734: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32735: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32736: {'neg': 0.167, 'neu': 0.43, 'pos': 0.403, 'compound': 0.6597},
+ 32737: {'neg': 0.19, 'neu': 0.664, 'pos': 0.146, 'compound': -0.0},
+ 32738: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32739: {'neg': 0.0, 'neu': 0.737, 'pos': 0.263, 'compound': 0.6458},
+ 32740: {'neg': 0.0, 'neu': 0.736, 'pos': 0.264, 'compound': 0.5562},
+ 32741: {'neg': 0.0, 'neu': 0.576, 'pos': 0.424, 'compound': 0.8436},
+ 32742: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32743: {'neg': 0.0, 'neu': 0.455, 'pos': 0.545, 'compound': 0.6988},
+ 32744: {'neg': 0.254, 'neu': 0.61, 'pos': 0.136, 'compound': -0.3612},
+ 32745: {'neg': 0.0, 'neu': 0.791, 'pos': 0.209, 'compound': 0.5719},
+ 32746: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32747: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32748: {'neg': 0.162, 'neu': 0.838, 'pos': 0.0, 'compound': -0.4019},
+ 32749: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32750: {'neg': 0.0, 'neu': 0.855, 'pos': 0.145, 'compound': 0.4376},
+ 32751: {'neg': 0.0, 'neu': 0.436, 'pos': 0.564, 'compound': 0.3802},
+ 32752: {'neg': 0.104, 'neu': 0.56, 'pos': 0.336, 'compound': 0.5994},
+ 32753: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32754: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32755: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32756: {'neg': 0.174, 'neu': 0.826, 'pos': 0.0, 'compound': -0.6124},
+ 32757: {'neg': 0.0, 'neu': 0.646, 'pos': 0.354, 'compound': 0.8682},
+ 32758: {'neg': 0.0, 'neu': 0.848, 'pos': 0.152, 'compound': 0.3612},
+ 32759: {'neg': 0.0, 'neu': 0.787, 'pos': 0.213, 'compound': 0.4019},
+ 32760: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32761: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32762: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32763: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32764: {'neg': 0.069, 'neu': 0.872, 'pos': 0.06, 'compound': -0.0516},
+ 32765: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32766: {'neg': 0.231, 'neu': 0.769, 'pos': 0.0, 'compound': -0.4588},
+ 32767: {'neg': 0.194, 'neu': 0.806, 'pos': 0.0, 'compound': -0.34},
+ 32768: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32769: {'neg': 0.287, 'neu': 0.492, 'pos': 0.221, 'compound': -0.2023},
+ 32770: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32771: {'neg': 0.275, 'neu': 0.725, 'pos': 0.0, 'compound': -0.6486},
+ 32772: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32773: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32774: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32775: {'neg': 0.076, 'neu': 0.74, 'pos': 0.185, 'compound': 0.2714},
+ 32776: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32777: {'neg': 0.115, 'neu': 0.469, 'pos': 0.417, 'compound': 0.7783},
+ 32778: {'neg': 0.0, 'neu': 0.804, 'pos': 0.196, 'compound': 0.5983},
+ 32779: {'neg': 0.0, 'neu': 0.513, 'pos': 0.487, 'compound': 0.6908},
+ 32780: {'neg': 0.0, 'neu': 0.654, 'pos': 0.346, 'compound': 0.8904},
+ 32781: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32782: {'neg': 0.0, 'neu': 0.726, 'pos': 0.274, 'compound': 0.7783},
+ 32783: {'neg': 0.0, 'neu': 0.471, 'pos': 0.529, 'compound': 0.8779},
+ 32784: {'neg': 0.256, 'neu': 0.5, 'pos': 0.243, 'compound': -0.1007},
+ 32785: {'neg': 0.0, 'neu': 0.575, 'pos': 0.425, 'compound': 0.5719},
+ 32786: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32787: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32788: {'neg': 0.0, 'neu': 0.848, 'pos': 0.152, 'compound': 0.3612},
+ 32789: {'neg': 0.0, 'neu': 0.514, 'pos': 0.486, 'compound': 0.8209},
+ 32790: {'neg': 0.128, 'neu': 0.872, 'pos': 0.0, 'compound': -0.296},
+ 32791: {'neg': 0.255, 'neu': 0.745, 'pos': 0.0, 'compound': -0.6249},
+ 32792: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32793: {'neg': 0.257, 'neu': 0.743, 'pos': 0.0, 'compound': -0.5423},
+ 32794: {'neg': 0.0, 'neu': 0.804, 'pos': 0.196, 'compound': 0.6588},
+ 32795: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32796: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32797: {'neg': 0.274, 'neu': 0.726, 'pos': 0.0, 'compound': -0.5255},
+ 32798: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32799: {'neg': 0.0, 'neu': 0.901, 'pos': 0.099, 'compound': 0.0258},
+ 32800: {'neg': 0.0, 'neu': 0.626, 'pos': 0.374, 'compound': 0.6988},
+ 32801: {'neg': 0.135, 'neu': 0.865, 'pos': 0.0, 'compound': -0.1027},
+ 32802: {'neg': 0.146, 'neu': 0.769, 'pos': 0.084, 'compound': -0.4002},
+ 32803: {'neg': 0.0, 'neu': 0.915, 'pos': 0.085, 'compound': 0.0772},
+ 32804: {'neg': 0.384, 'neu': 0.616, 'pos': 0.0, 'compound': -0.6808},
+ 32805: {'neg': 0.364, 'neu': 0.636, 'pos': 0.0, 'compound': -0.743},
+ 32806: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32807: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32808: {'neg': 0.336, 'neu': 0.664, 'pos': 0.0, 'compound': -0.8436},
+ 32809: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32810: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32811: {'neg': 0.346, 'neu': 0.654, 'pos': 0.0, 'compound': -0.875},
+ 32812: {'neg': 0.293, 'neu': 0.562, 'pos': 0.145, 'compound': -0.5713},
+ 32813: {'neg': 0.131, 'neu': 0.869, 'pos': 0.0, 'compound': -0.1689},
+ 32814: {'neg': 0.0, 'neu': 0.579, 'pos': 0.421, 'compound': 0.7901},
+ 32815: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32816: {'neg': 0.0, 'neu': 0.513, 'pos': 0.487, 'compound': 0.5859},
+ 32817: {'neg': 0.0, 'neu': 0.417, 'pos': 0.583, 'compound': 0.7906},
+ 32818: {'neg': 0.29, 'neu': 0.71, 'pos': 0.0, 'compound': -0.6705},
+ 32819: {'neg': 0.286, 'neu': 0.714, 'pos': 0.0, 'compound': -0.1531},
+ 32820: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32821: {'neg': 0.0, 'neu': 0.671, 'pos': 0.329, 'compound': 0.9062},
+ 32822: {'neg': 0.29, 'neu': 0.649, 'pos': 0.061, 'compound': -0.743},
+ 32823: {'neg': 0.427, 'neu': 0.573, 'pos': 0.0, 'compound': -0.7717},
+ 32824: {'neg': 0.216, 'neu': 0.608, 'pos': 0.176, 'compound': -0.1796},
+ 32825: {'neg': 0.237, 'neu': 0.763, 'pos': 0.0, 'compound': -0.4767},
+ 32826: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32827: {'neg': 0.0, 'neu': 0.709, 'pos': 0.291, 'compound': 0.5719},
+ 32828: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32829: {'neg': 0.0, 'neu': 0.586, 'pos': 0.414, 'compound': 0.872},
+ 32830: {'neg': 0.474, 'neu': 0.526, 'pos': 0.0, 'compound': -0.926},
+ 32831: {'neg': 0.0, 'neu': 0.524, 'pos': 0.476, 'compound': 0.8442},
+ 32832: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32833: {'neg': 0.0, 'neu': 0.606, 'pos': 0.394, 'compound': 0.0772},
+ 32834: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32835: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32836: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32837: {'neg': 0.0, 'neu': 0.753, 'pos': 0.247, 'compound': 0.508},
+ 32838: {'neg': 0.42, 'neu': 0.58, 'pos': 0.0, 'compound': -0.4404},
+ 32839: {'neg': 0.0, 'neu': 0.739, 'pos': 0.261, 'compound': 0.6476},
+ 32840: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32841: {'neg': 0.258, 'neu': 0.583, 'pos': 0.158, 'compound': -0.296},
+ 32842: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32843: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32844: {'neg': 0.574, 'neu': 0.426, 'pos': 0.0, 'compound': -0.9259},
+ 32845: {'neg': 0.252, 'neu': 0.748, 'pos': 0.0, 'compound': -0.4019},
+ 32846: {'neg': 0.095, 'neu': 0.905, 'pos': 0.0, 'compound': -0.2263},
+ 32847: {'neg': 0.42, 'neu': 0.58, 'pos': 0.0, 'compound': -0.6219},
+ 32848: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32849: {'neg': 0.108, 'neu': 0.659, 'pos': 0.233, 'compound': 0.5621},
+ 32850: {'neg': 0.314, 'neu': 0.686, 'pos': 0.0, 'compound': -0.6696},
+ 32851: {'neg': 0.0, 'neu': 0.667, 'pos': 0.333, 'compound': 0.25},
+ 32852: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32853: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32854: {'neg': 0.237, 'neu': 0.515, 'pos': 0.247, 'compound': 0.0258},
+ 32855: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32856: {'neg': 0.0, 'neu': 0.755, 'pos': 0.245, 'compound': 0.3818},
+ 32857: {'neg': 0.0, 'neu': 0.786, 'pos': 0.214, 'compound': 0.4588},
+ 32858: {'neg': 0.0, 'neu': 0.729, 'pos': 0.271, 'compound': 0.6239},
+ 32859: {'neg': 0.0, 'neu': 0.817, 'pos': 0.183, 'compound': 0.555},
+ 32860: {'neg': 0.0, 'neu': 0.816, 'pos': 0.184, 'compound': 0.4019},
+ 32861: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32862: {'neg': 0.0, 'neu': 0.73, 'pos': 0.27, 'compound': 0.5719},
+ 32863: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32864: {'neg': 0.0, 'neu': 0.756, 'pos': 0.244, 'compound': 0.6369},
+ 32865: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32866: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32867: {'neg': 0.0, 'neu': 0.77, 'pos': 0.23, 'compound': 0.3382},
+ 32868: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32869: {'neg': 0.128, 'neu': 0.872, 'pos': 0.0, 'compound': -0.2263},
+ 32870: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32871: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32872: {'neg': 0.0, 'neu': 0.575, 'pos': 0.425, 'compound': 0.5719},
+ 32873: {'neg': 0.11, 'neu': 0.731, 'pos': 0.159, 'compound': 0.2712},
+ 32874: {'neg': 0.131, 'neu': 0.869, 'pos': 0.0, 'compound': -0.308},
+ 32875: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32876: {'neg': 0.0, 'neu': 0.656, 'pos': 0.344, 'compound': 0.743},
+ 32877: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32878: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32879: {'neg': 0.0, 'neu': 0.849, 'pos': 0.151, 'compound': 0.3595},
+ 32880: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32881: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32882: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32883: {'neg': 0.0, 'neu': 0.539, 'pos': 0.461, 'compound': 0.6467},
+ 32884: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32885: {'neg': 0.0, 'neu': 0.663, 'pos': 0.337, 'compound': 0.7249},
+ 32886: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32887: {'neg': 0.103, 'neu': 0.674, 'pos': 0.223, 'compound': 0.5673},
+ 32888: {'neg': 0.0, 'neu': 0.516, 'pos': 0.484, 'compound': 0.7579},
+ 32889: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32890: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32891: {'neg': 0.12, 'neu': 0.636, 'pos': 0.244, 'compound': 0.5707},
+ 32892: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32893: {'neg': 0.0, 'neu': 0.877, 'pos': 0.123, 'compound': 0.4201},
+ 32894: {'neg': 0.195, 'neu': 0.805, 'pos': 0.0, 'compound': -0.4404},
+ 32895: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32896: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32897: {'neg': 0.419, 'neu': 0.581, 'pos': 0.0, 'compound': -0.5574},
+ 32898: {'neg': 0.0, 'neu': 0.519, 'pos': 0.481, 'compound': 0.5719},
+ 32899: {'neg': 0.286, 'neu': 0.714, 'pos': 0.0, 'compound': -0.25},
+ 32900: {'neg': 0.0, 'neu': 0.816, 'pos': 0.184, 'compound': 0.4019},
+ 32901: {'neg': 0.0, 'neu': 0.541, 'pos': 0.459, 'compound': 0.5267},
+ 32902: {'neg': 0.0, 'neu': 0.802, 'pos': 0.198, 'compound': 0.5719},
+ 32903: {'neg': 0.0, 'neu': 0.833, 'pos': 0.167, 'compound': 0.4215},
+ 32904: {'neg': 0.0, 'neu': 0.825, 'pos': 0.175, 'compound': 0.4926},
+ 32905: {'neg': 0.263, 'neu': 0.465, 'pos': 0.271, 'compound': 0.0276},
+ 32906: {'neg': 0.0, 'neu': 0.663, 'pos': 0.337, 'compound': 0.7249},
+ 32907: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32908: {'neg': 0.112, 'neu': 0.683, 'pos': 0.205, 'compound': 0.4404},
+ 32909: {'neg': 0.256, 'neu': 0.744, 'pos': 0.0, 'compound': -0.4767},
+ 32910: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32911: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32912: {'neg': 0.0, 'neu': 0.448, 'pos': 0.552, 'compound': 0.5719},
+ 32913: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32914: {'neg': 0.0, 'neu': 0.829, 'pos': 0.171, 'compound': 0.5719},
+ 32915: {'neg': 0.372, 'neu': 0.526, 'pos': 0.102, 'compound': -0.8475},
+ 32916: {'neg': 0.0, 'neu': 0.756, 'pos': 0.244, 'compound': 0.6369},
+ 32917: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32918: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32919: {'neg': 0.0, 'neu': 0.588, 'pos': 0.412, 'compound': 0.8271},
+ 32920: {'neg': 0.231, 'neu': 0.769, 'pos': 0.0, 'compound': -0.5859},
+ 32921: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32922: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32923: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32924: {'neg': 0.0, 'neu': 0.693, 'pos': 0.307, 'compound': 0.6114},
+ 32925: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32926: {'neg': 0.0, 'neu': 0.511, 'pos': 0.489, 'compound': 0.9246},
+ 32927: {'neg': 0.108, 'neu': 0.892, 'pos': 0.0, 'compound': -0.2924},
+ 32928: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32929: {'neg': 0.0, 'neu': 0.797, 'pos': 0.203, 'compound': 0.4215},
+ 32930: {'neg': 0.0, 'neu': 0.834, 'pos': 0.166, 'compound': 0.3382},
+ 32931: {'neg': 0.0, 'neu': 0.637, 'pos': 0.363, 'compound': 0.6908},
+ 32932: {'neg': 0.165, 'neu': 0.835, 'pos': 0.0, 'compound': -0.5216},
+ 32933: {'neg': 0.0, 'neu': 0.694, 'pos': 0.306, 'compound': 0.6093},
+ 32934: {'neg': 0.0, 'neu': 0.741, 'pos': 0.259, 'compound': 0.6369},
+ 32935: {'neg': 0.116, 'neu': 0.884, 'pos': 0.0, 'compound': -0.2732},
+ 32936: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32937: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32938: {'neg': 0.0, 'neu': 0.615, 'pos': 0.385, 'compound': 0.3612},
+ 32939: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32940: {'neg': 0.306, 'neu': 0.592, 'pos': 0.102, 'compound': -0.7351},
+ 32941: {'neg': 0.0, 'neu': 0.656, 'pos': 0.344, 'compound': 0.6369},
+ 32942: {'neg': 0.0, 'neu': 0.741, 'pos': 0.259, 'compound': 0.6369},
+ 32943: {'neg': 0.0, 'neu': 0.798, 'pos': 0.202, 'compound': 0.5106},
+ 32944: {'neg': 0.0, 'neu': 0.714, 'pos': 0.286, 'compound': 0.4215},
+ 32945: {'neg': 0.223, 'neu': 0.777, 'pos': 0.0, 'compound': -0.3182},
+ 32946: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32947: {'neg': 0.251, 'neu': 0.749, 'pos': 0.0, 'compound': -0.7717},
+ 32948: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32949: {'neg': 0.0, 'neu': 0.537, 'pos': 0.463, 'compound': 0.8176},
+ 32950: {'neg': 0.0, 'neu': 0.847, 'pos': 0.153, 'compound': 0.4404},
+ 32951: {'neg': 0.0, 'neu': 0.75, 'pos': 0.25, 'compound': 0.4588},
+ 32952: {'neg': 0.263, 'neu': 0.567, 'pos': 0.17, 'compound': -0.2023},
+ 32953: {'neg': 0.0, 'neu': 0.631, 'pos': 0.369, 'compound': 0.6249},
+ 32954: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32955: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32956: {'neg': 0.0, 'neu': 0.629, 'pos': 0.371, 'compound': 0.7096},
+ 32957: {'neg': 0.0, 'neu': 0.69, 'pos': 0.31, 'compound': 0.802},
+ 32958: {'neg': 0.069, 'neu': 0.872, 'pos': 0.06, 'compound': -0.0516},
+ 32959: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32960: {'neg': 0.0, 'neu': 0.86, 'pos': 0.14, 'compound': 0.1531},
+ 32961: {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0},
+ 32962: {'neg': 0.0, 'neu': 0.792, 'pos': 0.208, 'compound': 0.6369},
+ ...}
+
+vader = pd.DataFrame(result).T
+vader
+     
+neg	neu	pos	compound
+31963	0.000	1.000	0.000	0.0000
+31964	0.000	0.920	0.080	0.0772
+31965	0.000	0.663	0.337	0.6209
+31966	0.086	0.786	0.127	0.2593
+31967	0.000	0.534	0.466	0.8883
+...	...	...	...	...
+49155	0.000	1.000	0.000	0.0000
+49156	0.000	0.714	0.286	0.4588
+49157	0.000	0.865	0.135	0.3612
+49158	0.000	0.748	0.252	0.5719
+49159	0.000	0.475	0.525	0.8288
+17197 rows × 4 columns
+
+
+def sentiment(ve):
+    if ve > 0 :
+        return "0"
+    elif ve == 0:
+        return "2"
+    else:
+        return "1"
+     
+
+vader['label'] = vader['compound'].apply(sentiment)
+     
+
+vader.head()
+     
+neg	neu	pos	compound	label
+31963	0.000	1.000	0.000	0.0000	2
+31964	0.000	0.920	0.080	0.0772	0
+31965	0.000	0.663	0.337	0.6209	0
+31966	0.086	0.786	0.127	0.2593	0
+31967	0.000	0.534	0.466	0.8883	0
+
+vader['label'].value_counts()
+     
+0    7195
+2    6793
+1    3209
+Name: label, dtype: int64
+
+# Another Way to analyze positive and negative statements.
+# Here i am considering nutral and positive statements with label value 0 and  negative statement with label value 1.
+def sentiment_analysis(reviews):
+    analyzer = SentimentIntensityAnalyzer()
+
+    sentiments = []
+    for review in reviews:
+        sentiment = analyzer.polarity_scores(review)['compound']
+        if sentiment >= 0:
+            sentiments.append("0")
+        elif sentiment < 0:
+            sentiments.append("1")
+        else:
+            sentiments.append("2")
+
+    return sentiments
+     
+
+reviews = df1['tweet']
+sentiments = sentiment_analysis(reviews)
+sentiments[:5]
+     
+['0', '0', '0', '0', '0']
+
+df1.insert(1,'label',sentiments)
+     
+
+df1['label'].value_counts()
+     
+0    13988
+1     3209
+Name: label, dtype: int64
+
+df1.head()
+     
+id	label	tweet
+0	31963	0	#studiolife #aislife #requires #passion #dedic...
+1	31964	0	@user #white #supremacists want everyone to s...
+2	31965	0	safe ways to heal your #acne!! #altwaystohe...
+3	31966	0	is the hp and the cursed child book up for res...
+4	31967	0	3rd #bihday to my amazing, hilarious #nephew...
+
+from textblob import TextBlob
+
+def sentiment_analysis(review):
+    sentiments = []
+    for review in reviews:
+        sentiment = TextBlob(review).sentiment.polarity
+        if sentiment > 0:
+            sentiments.append("Positive")
+        elif sentiment == 0:
+            sentiments.append("Neutral")
+        else:
+            sentiments.append("Negative")
+
+    return sentiments
+     
+
+reviews = df1['tweet']
+sentiments = sentiment_analysis(reviews)
+sentiments[:5]
+     
+['Neutral', 'Positive', 'Positive', 'Positive', 'Positive']
